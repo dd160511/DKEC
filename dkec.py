@@ -3,7 +3,6 @@ import argparse
 import random
 import sqlite3
 from multiprocessing import Pool
-from time import time
 
 import numpy as np
 import sklearn
@@ -121,7 +120,7 @@ class KAE(nn.Module):
         self.e2 = Linear(data_num, data_num)
         self.e3 = Linear(data_num, data_num)
         self.e4 = Linear(data_num, data_num)
-
+        self.gnn_1 = GNNLayer(n_input, data_num)
 
         self.g1 = Linear(500, n_input)
         self.g2 = Linear(500, 500)
@@ -188,10 +187,10 @@ def train_sdcn(runtime, dataset, datasetname, device):
     y = dataset.y
     with torch.no_grad():
         mu, z, p, q, real, fake, zbar, z1 = model(data)
-    kmeans = KMeans(n_clusters=args.n_clusters, n_init=20)
-    y_pred = kmeans.fit_predict(z.detach().cpu().numpy())
+    kmeans1 = KMeans(n_clusters=args.n_clusters, n_init=20)
+    y_pred = kmeans1.fit_predict(z.detach().cpu().numpy())
     # y_pred, dist = kernel_kmeans(k.detach().cpu().numpy(), args.n_clusters)
-    model.cluster_layer.data = torch.tensor(kmeans.cluster_centers_).to(device)
+    model.cluster_layer.data = torch.tensor(kmeans1.cluster_centers_).to(device)
 
     eva(y, y_pred, 'pae')
 
@@ -204,8 +203,7 @@ def train_sdcn(runtime, dataset, datasetname, device):
 
             res1 = p.cpu().numpy().argmax(1)  # Q
             res2 = s.cpu().numpy().argmax(1)  # S
-            # 两种K-means方法，用适合的。
-            # kmeans = KMeans(n_clusters=args.n_clusters, n_init=20)
+            kmeans = KMeans(n_clusters=args.n_clusters, n_init=20)
             y_pred1 = kmeans.fit_predict(z.data.cpu().numpy())
             # y_pred1,_=kmeans(z, num_clusters=args.n_clusters, tqdm_flag=False,device=device)
             # y_pred1=y_pred1.data.cpu().numpy()
@@ -221,9 +219,6 @@ def train_sdcn(runtime, dataset, datasetname, device):
         loss = 1 * F.mse_loss(mu, data) + 0.001 * real_adv_loss + 0.001 * fake_adv_loss + 0.1 * F.mse_loss(z,
                                                                                                            zbar) + 0.1 * F.kl_div(
             q.log(), s, reduction='batchmean') + 1 * kl_loss
-        # loss=1*kl_loss
-        # loss=1* F.mse_loss(mu, data)+0.001*real_adv_loss+0.001*fake_adv_loss+1*kl_loss
-        # loss=0.1* F.mse_loss(z, zbar)+0.1*F.kl_div(q.log(), s, reduction='batchmean') +1*kl_loss
 
         optimizer.zero_grad()
         loss.backward()
@@ -233,18 +228,18 @@ def train_sdcn(runtime, dataset, datasetname, device):
 if __name__ == "__main__":
     con = sqlite3.connect("SDCN-master/result.db")
     cur = con.cursor()
-    cur.execute("delete from sdcn")
+    cur.execute("delete from sdcn ")
     con.commit()
-    startdate = time()
-    datasets = ['bbc']
+
+    datasets = ['bbcsport']
     # datasets = ['StackOverflow'] #dataname:20news,batch:0 46 :acc 0.3302 , nmi 0.3216 , ari 0.1964 , f1 0.3115
     for dataset in datasets:
-        batch = 100  # 运行轮次
+        batch = 30  # 运行轮次
         parser = argparse.ArgumentParser(
             description='train',
             formatter_class=argparse.ArgumentDefaultsHelpFormatter)
         parser.add_argument('--name', type=str, default=dataset)
-        parser.add_argument('--lr', type=float, default=5e-3)
+        parser.add_argument('--lr', type=float, default=5e-4)
         parser.add_argument('--n_clusters', default=3, type=int)
         parser.add_argument('--n_z', default=10, type=int)
         parser.add_argument('--data_num', default=20000, type=int)
@@ -347,10 +342,8 @@ if __name__ == "__main__":
             train_sdcn(i, dataset, args.name, device)
             torch.cuda.empty_cache()
     torch.cuda.empty_cache()
-    enddate = time()
-    print("{} run time:{}".format(dataset, enddate - startdate))
     # _datasets = ['bbc', 'bbcsport']
-    _datasets = ['bbc', 'acm', 'abstract', 'bbcsport', 'wiki', 'rcv', 'cite', '20news', 'face', 'StackOverflow']
+    _datasets = ['bbc', 'acm', 'abstract', 'bbcsport', 'wiki', 'rcv', 'cite', '20news', 'face']
     for name in _datasets:
         datas = cur.execute(
             "select datasetname,batch,epoch,acc,nmi,ari,f1 from sdcn where datasetname=? order by batch",
