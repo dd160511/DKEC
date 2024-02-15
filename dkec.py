@@ -4,14 +4,14 @@ import random
 import sqlite3
 from multiprocessing import Pool
 from time import time
-from GNN import GNNLayer
+
 import numpy as np
 import sklearn
 from scipy.sparse import csgraph
-from ranger import Ranger  # this is from ranger.py # this is from ranger.py
+
 from sklearn import cluster
 from sklearn.cluster import KMeans, spectral_clustering
-#from kmeans_pytorch import kmeans
+from kmeans_pytorch import kmeans
 from sklearn.metrics.cluster import normalized_mutual_info_score as nmi_score
 from sklearn.metrics import adjusted_rand_score as ari_score, pairwise_kernels
 import torch
@@ -22,7 +22,7 @@ from torch.nn.parameter import Parameter
 from torch.optim import Adam
 from torch.utils.data import DataLoader
 from torch.nn import Linear
-from crsc_ik import crsc_ik, kernel_kmeans
+
 from utils import load_data, load_graph
 from evaluation import eva
 import math
@@ -33,7 +33,7 @@ import math
 import gpytorch
 from gpytorch import kernels, means, models, mlls, settings
 from gpytorch import distributions as distr
-from compute_kernels import compute_kernels, compute_kernelst, compute_kernelsp, compute_kernelsg
+
 
 
 class AE(nn.Module):
@@ -118,10 +118,10 @@ class KAE(nn.Module):
             n_z=n_z)
         # self.ae.load_state_dict(torch.load(args.pretrain_path, map_location='cpu'))
         self.e1 = Linear(n_input, 500)
-        self.e2 = Linear(500, 500)
+        self.e2 = Linear(data_num, data_num)
         self.e3 = Linear(data_num, data_num)
         self.e4 = Linear(data_num, data_num)
-        self.gnn_1 = GNNLayer(n_input, data_num)
+
 
         self.g1 = Linear(500, n_input)
         self.g2 = Linear(500, 500)
@@ -140,10 +140,9 @@ class KAE(nn.Module):
 
     def forward(self, x):
         z1 = torch.tanh(self.e1(x))
-        # z = z1.transpose(-1, -2).unsqueeze(-1)
-        # z = self.gp_layer(z)
-        # z = z.mean
-        z = torch.tanh(self.e2(z1))
+        z = z1.transpose(-1, -2).unsqueeze(-1)
+        z = self.gp_layer(z)
+        z = z.mean
 
         zbar = torch.tanh(self.g2(z))
         mu = torch.tanh(self.g1(zbar))
@@ -157,7 +156,7 @@ class KAE(nn.Module):
         real = torch.tanh(self.d2(real))
         real = (self.d3(real))
 
-        #  Self-supervised Module
+        # Dual Self-supervised Module
         p = 1.0 / (1.0 + torch.sum(torch.pow(z.unsqueeze(1) - self.cluster_layer, 2), 2) / (1))
         p = p.pow((1 + 1.0) / 2.0)
         p = (p.t() / torch.sum(p, 1)).t()
@@ -189,10 +188,10 @@ def train_sdcn(runtime, dataset, datasetname, device):
     y = dataset.y
     with torch.no_grad():
         mu, z, p, q, real, fake, zbar, z1 = model(data)
-    kmeans1 = KMeans(n_clusters=args.n_clusters, n_init=20)
-    y_pred = kmeans1.fit_predict(z.detach().cpu().numpy())
+    kmeans = KMeans(n_clusters=args.n_clusters, n_init=20)
+    y_pred = kmeans.fit_predict(z.detach().cpu().numpy())
     # y_pred, dist = kernel_kmeans(k.detach().cpu().numpy(), args.n_clusters)
-    model.cluster_layer.data = torch.tensor(kmeans1.cluster_centers_).to(device)
+    model.cluster_layer.data = torch.tensor(kmeans.cluster_centers_).to(device)
 
     eva(y, y_pred, 'pae')
 
@@ -206,13 +205,12 @@ def train_sdcn(runtime, dataset, datasetname, device):
             res1 = p.cpu().numpy().argmax(1)  # Q
             res2 = s.cpu().numpy().argmax(1)  # S
             # 两种K-means方法，用适合的。
-            kmeans = KMeans(n_clusters=args.n_clusters, n_init=20)
+            # kmeans = KMeans(n_clusters=args.n_clusters, n_init=20)
             y_pred1 = kmeans.fit_predict(z.data.cpu().numpy())
             # y_pred1,_=kmeans(z, num_clusters=args.n_clusters, tqdm_flag=False,device=device)
             # y_pred1=y_pred1.data.cpu().numpy()
 
-            pdatas = { 'z': z}
-            eva(y, y_pred1, pdatas, str(epoch) + 'Q', runtime, datasetname)
+            eva(y, y_pred1, str(epoch) + 'K', runtime, datasetname)
         # eva(y, res1, str(epoch) +'Q', runtime, datasetname)
 
         ## adversarial loss
@@ -223,24 +221,25 @@ def train_sdcn(runtime, dataset, datasetname, device):
         loss = 1 * F.mse_loss(mu, data) + 0.001 * real_adv_loss + 0.001 * fake_adv_loss + 0.1 * F.mse_loss(z,
                                                                                                            zbar) + 0.1 * F.kl_div(
             q.log(), s, reduction='batchmean') + 1 * kl_loss
-
+        # loss=1*kl_loss
+        # loss=1* F.mse_loss(mu, data)+0.001*real_adv_loss+0.001*fake_adv_loss+1*kl_loss
+        # loss=0.1* F.mse_loss(z, zbar)+0.1*F.kl_div(q.log(), s, reduction='batchmean') +1*kl_loss
 
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
 
 
-
 if __name__ == "__main__":
-    con = sqlite3.connect("result.db")
+    con = sqlite3.connect("SDCN-master/result.db")
     cur = con.cursor()
     cur.execute("delete from sdcn")
     con.commit()
     startdate = time()
-    datasets = ['bbcsport']
-
+    datasets = ['bbc']
+    # datasets = ['StackOverflow'] #dataname:20news,batch:0 46 :acc 0.3302 , nmi 0.3216 , ari 0.1964 , f1 0.3115
     for dataset in datasets:
-        batch = 1  # 运行轮次
+        batch = 100  # 运行轮次
         parser = argparse.ArgumentParser(
             description='train',
             formatter_class=argparse.ArgumentDefaultsHelpFormatter)

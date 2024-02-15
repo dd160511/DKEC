@@ -70,40 +70,7 @@ def cluster_acc(y_true, y_pred):
 #     print(epoch, ':acc {:.4f}'.format(acc), ', nmi {:.4f}'.format(nmi), ', ari {:.4f}'.format(ari),
 #             ', f1 {:.4f}'.format(f1))
 
-# def eva(y_true, y_pred, epoch=0, bacth=0, datasetname=None):
-#     flag=False
-#     acc, f1 = cluster_acc(y_true, y_pred)
-#     # nmi = nmi_score(y_true, y_pred, average_method='arithmetic')
-#     nmi = nmi_score(y_true, y_pred)
-#     ari = ari_score(y_true, y_pred)
-#     print('dataname:{0},batch:{1}'.format(datasetname,bacth),epoch, ':acc {:.4f}'.format(acc), ', nmi {:.4f}'.format(nmi), ', ari {:.4f}'.format(ari),
-#           ', f1 {:.4f}'.format(f1))
-#
-#     if epoch == 'pae':
-#         return
-#
-#     con = sqlite3.connect("result.db")
-#     cur = con.cursor()
-#
-#     hasdata = cur.execute("select * from sdcn where batch = ? and datasetname = ?",
-#                             [bacth, datasetname]).fetchone()
-#     if hasdata == None:
-#         cur.execute("insert into sdcn(batch,epoch,acc,nmi,ari,f1,datasetname) values(?,?,?,?,?,?,?)",
-#                     [bacth, epoch, acc, nmi, ari, f1, datasetname])
-#         con.commit()
-#
-#     oldresult = cur.execute("select * from sdcn where nmi<? and batch = ? and datasetname = ?",
-#                             [nmi, bacth, datasetname]).fetchone()
-#     if oldresult != None:
-#         cur.execute("update sdcn set acc=?,nmi=?,ari=?,f1=?,epoch=? where batch=? and datasetname=?",
-#                     [acc, nmi, ari, f1, epoch, bacth, datasetname])
-#         flag=True
-#         con.commit()
-#
-#     cur.close()
-#     con.close()
-#     return nmi,nmi,nmi,flag
-def eva(y_true, y_pred, pdatas,epoch=0, bacth=0, datasetname=None):
+def eva(y_true, y_pred, epoch=0, bacth=0, datasetname=None):
     flag=False
     acc, f1 = cluster_acc(y_true, y_pred)
     # nmi = nmi_score(y_true, y_pred, average_method='arithmetic')
@@ -130,15 +97,48 @@ def eva(y_true, y_pred, pdatas,epoch=0, bacth=0, datasetname=None):
     if oldresult != None:
         cur.execute("update sdcn set acc=?,nmi=?,ari=?,f1=?,epoch=? where batch=? and datasetname=?",
                     [acc, nmi, ari, f1, epoch, bacth, datasetname])
-        for key in pdatas:
-            label = F.softmax(pdatas[key], dim=1).data.cpu().numpy().argmax(1)
-            #label = y_true
-            filename = "{0}_{1}_{2}".format(datasetname,bacth, key)
-            np.savetxt(r"./hdatas/{0}.txt".format(filename),pdatas[key].data.cpu().numpy(),fmt='%.8f')
-            np.savetxt(r"./hdatas/{0}_label.txt".format(filename),label,fmt='%d')
         flag=True
         con.commit()
 
     cur.close()
     con.close()
-    return flag
+    return nmi,nmi,nmi,flag
+# def eva(y_true, y_pred, pdatas,epoch=0, bacth=0, datasetname=None):
+#     flag=False
+#     acc, f1 = cluster_acc(y_true, y_pred)
+#     # nmi = nmi_score(y_true, y_pred, average_method='arithmetic')
+#     nmi = nmi_score(y_true, y_pred)
+#     ari = ari_score(y_true, y_pred)
+#     print('dataname:{0},batch:{1}'.format(datasetname,bacth),epoch, ':acc {:.4f}'.format(acc), ', nmi {:.4f}'.format(nmi), ', ari {:.4f}'.format(ari),
+#           ', f1 {:.4f}'.format(f1))
+#
+#     if epoch == 'pae':
+#         return
+#
+#     con = sqlite3.connect("result.db")
+#     cur = con.cursor()
+#
+#     hasdata = cur.execute("select * from sdcn where batch = ? and datasetname = ?",
+#                             [bacth, datasetname]).fetchone()
+#     if hasdata == None:
+#         cur.execute("insert into sdcn(batch,epoch,acc,nmi,ari,f1,datasetname) values(?,?,?,?,?,?,?)",
+#                     [bacth, epoch, acc, nmi, ari, f1, datasetname])
+#         con.commit()
+#
+#     oldresult = cur.execute("select * from sdcn where nmi<? and batch = ? and datasetname = ?",
+#                             [nmi, bacth, datasetname]).fetchone()
+#     if oldresult != None:
+#         cur.execute("update sdcn set acc=?,nmi=?,ari=?,f1=?,epoch=? where batch=? and datasetname=?",
+#                     [acc, nmi, ari, f1, epoch, bacth, datasetname])
+#         for key in pdatas:
+#             label = F.softmax(pdatas[key], dim=1).data.cpu().numpy().argmax(1)
+#             #label = y_true
+#             filename = "{0}_{1}_{2}".format(datasetname,bacth, key)
+#             np.savetxt(r"./hdatas/{0}.txt".format(filename),pdatas[key].data.cpu().numpy(),fmt='%.8f')
+#             np.savetxt(r"./hdatas/{0}_label.txt".format(filename),label,fmt='%d')
+#         flag=True
+#         con.commit()
+#
+#     cur.close()
+#     con.close()
+#     return flag
